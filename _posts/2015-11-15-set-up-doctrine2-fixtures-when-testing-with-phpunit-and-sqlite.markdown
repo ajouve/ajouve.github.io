@@ -46,7 +46,7 @@ Install Doctrine Fixtures via composer
 
     composer require --dev doctrine/doctrine-fixtures-bundle
 
-Then, add the following line in the `app/AppKernel.php` file to enable this bundle only for the `dev` and `test` environments:
+Then, update your `app/AppKernel.php` file to enable this bundle only for the `dev` and `test` environments:
 
 {% highlight php %}
 <?php
@@ -255,6 +255,6 @@ You should have something like
 
     OK (1 test, 1 assertion)
 
-I create a repo to sum up the tutorial [https://github.com/ajouve/doctrine-fixture-phpunit-example](https://github.com/ajouve/doctrine-fixture-phpunit-example){:target="_blank"}
+I created a repo to sum up the tutorial [https://github.com/ajouve/doctrine-fixture-phpunit-example](https://github.com/ajouve/doctrine-fixture-phpunit-example){:target="_blank"}
 
 I hope this tutorial will be useful for you, if you have any problem or remark you can contact me on twitter, just have a look to the footer for the details ;)
