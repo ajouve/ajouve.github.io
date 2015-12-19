@@ -3,6 +3,9 @@ layout: post
 title:  "Set up Doctrine2 fixtures when testing with PHPUnit and SQLite"
 date:   2015-11-15 19:30:49 +0000
 categories: Symfony2 PHPUnit Doctrine2
+
+# Discus
+comments: true
 ---
 
 ## Requirements
@@ -258,3 +261,22 @@ You should have something like
 I created a repo to sum up the tutorial [https://github.com/ajouve/doctrine-fixture-phpunit-example](https://github.com/ajouve/doctrine-fixture-phpunit-example){:target="_blank"}
 
 I hope this tutorial will be useful for you, if you have any problem or remark you can contact me on twitter, just have a look to the footer for the details ;)
+
+{% if page.comments %}
+<div id="disqus_thread"></div>
+<script>
+    var disqus_config = function () {
+        this.page.url = window.location.href ;
+        this.page.identifier = 'set-up-doctrine2-fixtures-when-testing-with-phpunit-and-sqlite';
+    };
+    (function() {  // DON'T EDIT BELOW THIS LINE
+        var d = document, s = d.createElement('script');
+
+        s.src = '//ajouve.disqus.com/embed.js';
+
+        s.setAttribute('data-timestamp', +new Date());
+        (d.head || d.body).appendChild(s);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments powered by Disqus.</a></noscript>
+{% endif %}
