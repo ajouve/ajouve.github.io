@@ -8,8 +8,8 @@ categories: Symfony2 OAuth2 Microservice
 comments: true
 ---
 
-The goal of this tutorial is to create two Symfony2 application using an API secured by OAuth2 to communicate.
-We will create an application to get the current date and an other one to display the time calling a micro service.
+The goal of this tutorial is to create two Symfony2 applications using an API secured by OAuth2 to communicate.
+We will create an application to get the current date and an other one to display the time.
 
 ## Requirements
 
@@ -32,12 +32,14 @@ The Symfony Installer is a small PHP application that must be installed once in 
 
 ## Date API
 
+We will create a simple API which is returning the current date.
+
 ### Create our application
 
 Let's create our API to access and edit our customers.
 
-    $ symfony new customer_api 2.8
-    $ cd date_api
+    $ symfony new time-api 2.8
+    $ cd time-api
 
 Now create a controller to access the date
 
@@ -80,7 +82,7 @@ First start our server
 
 Now go to `http://127.0.0.1:8000/api/time/`, you should have something like
 
-    {"date":"2015-12-20","time":"12:43:34"}
+    {"date":"{{ site.time | date: '%Y-%m-%d' }}","time":"{{ site.time | date: '%H-%M-%S' }}"}
 
 ### Secure the API
 
@@ -190,7 +192,7 @@ Update the routing
 
 And edit the security
 
-# app/config/security.yml
+    # app/config/security.yml
     security:
         providers:
             in_memory:
@@ -290,14 +292,16 @@ class OAuthCreateClientCommand extends Command
 
 Add the command to yours services
 
-    # app/config/services.yml
-    services:
-        command.oauth_create_client:
-            class: AppBundle\Command\OAuthCreateClientCommand
-            arguments:
-                - @fos_oauth_server.client_manager.default
-            tags:
-                -  { name: console.command }
+{% highlight yaml %}
+# app/config/services.yml
+services:
+    command.oauth_create_client:
+        class: AppBundle\Command\OAuthCreateClientCommand
+        arguments:
+            - @fos_oauth_server.client_manager.default
+        tags:
+            -  { name: console.command }
+{% endhighlight %}
 
 Call the command to generate our client
 
@@ -321,4 +325,187 @@ This token will expire in 3600s, you can update this value in the configuration.
 
 Now go to `http://127.0.0.1:8000/api/time?access_token={MY_ACCESS_TOKEN}`, you should have the date !
 
-    {"date":"2015-12-20","time":"12:43:34"}
+    {"date":"{{ site.time | date: '%Y-%m-%d' }}","time":"{{ site.time | date: '%H-%M-%S' }}"}
+
+You can access full `time-api` code on [Github](https://github.com/ajouve/time-api){:target="_blank"}
+
+## Date reader
+
+Now we will create a new Symfony application to display the date received from the API
+
+### Create the application
+
+    $ symfony new time-reader 2.8
+    $ cd time-reader
+
+And start the application on an other port not used by the API
+
+    $ app/console server:run -p 8001
+
+### Display the date
+
+I am using [guzzle-oauth2-plugin](https://github.com/commerceguys/guzzle-oauth2-plugin){:target="_blank"} to manage the OAuth.
+This plugin is using [Guzzle](https://github.com/guzzle/guzzle){:target="_blank"} which is a PHP HTTP client that makes it easy to send HTTP requests and trivial to integrate with web services.
+
+    $ composer require commerceguys/guzzle-oauth2-plugin:2.0.*
+
+I have the following controller
+
+{% highlight php %}
+<?php
+// src/AppBundle/Controller/DefaultController.php
+
+namespace AppBundle\Controller;
+
+use CommerceGuys\Guzzle\Oauth2\GrantType\ClientCredentials;
+use CommerceGuys\Guzzle\Oauth2\Oauth2Subscriber;
+use GuzzleHttp\Client;
+use Sensio\Bundle\FrameworkExtraBundle\Configuration\Route;
+use Symfony\Bundle\FrameworkBundle\Controller\Controller;
+use Symfony\Component\HttpFoundation\Response;
+
+class DefaultController extends Controller
+{
+    /**
+     * @Route("/", name="homepage")
+     */
+    public function indexAction()
+    {
+        $base_url = 'http://127.0.0.1:8000';
+
+        $oauth2Client = new Client(['base_url' => $base_url]);
+
+        $config = [
+            'client_id' => '{CLIENT_ID}',
+            'client_secret' => '{CLIENT_SECRET}',
+            'token_url' => '/oauth/v2/token'
+        ];
+
+        $token = new ClientCredentials($oauth2Client, $config);
+
+        $oauth2 = new Oauth2Subscriber($token);
+
+        $client = new Client([
+            'defaults' => [
+                'auth' => 'oauth2',
+                'subscribers' => [$oauth2],
+            ],
+        ]);
+
+        $response = $client->get('http://127.0.0.1:8000/api/time');
+
+        $result = json_decode($response->getBody(), true);
+
+        return new Response(sprintf(
+            "Date from the API <br/> Date: %s <br/> Time: %s",
+            $result['date'],
+            $result['time']
+        ));
+    }
+}
+
+{% endhighlight %}
+
+First we create our Guzzle client, we will use this client to make call our API.
+
+Then we set up our client configuration and generate our client credentials.
+
+To finish we send a request to our API. Everything is managed automatically, first the client is calling `/oauth/v2/token` then go to `/api/time`, you didn't need to manage the access token.
+
+### Improvements
+
+In this controller we will generate a new access_token for each request. Now we will wait the token expiration until generating a new one.
+
+We will use [memcached](http://memcached.org/){:target="_blank"} to cache the access token. Memcached is an in-memory key-value store for small chunks of arbitrary data (strings, objects) from results of database calls, API calls, or page rendering.
+
+Install memcached on your server
+
+    $ sudo apt-get update
+    $ sudo apt-get install php5-memcached memcached
+
+Make sure the memcached server is running
+
+    $ service memcached status
+
+If not run
+
+    $ sudo service memcached start
+
+Now we can update our controller
+
+{% highlight php %}
+<?php
+// src/AppBundle/Controller/DefaultController.php
+
+namespace AppBundle\Controller;
+
+use CommerceGuys\Guzzle\Oauth2\GrantType\ClientCredentials;
+use CommerceGuys\Guzzle\Oauth2\Oauth2Subscriber;
+use GuzzleHttp\Client;
+use Sensio\Bundle\FrameworkExtraBundle\Configuration\Route;
+use Symfony\Bundle\FrameworkBundle\Controller\Controller;
+use Symfony\Component\HttpFoundation\Response;
+
+class DefaultController extends Controller
+{
+    /**
+     * @Route("/", name="homepage")
+     */
+    public function indexAction()
+    {
+      $base_url = 'http://127.0.0.1:8000';
+
+      $oauth2Client = new Client(['base_url' => $base_url]);
+
+      $config = [
+          'client_id' => '{CLIENT_ID}',
+          'client_secret' => '{CLIENT_SECRET}',
+          'token_url' => '/oauth/v2/token'
+      ];
+
+      $memcached = new \Memcached();
+      $memcached->addServer('localhost', 11211);
+
+      $token = new ClientCredentials($oauth2Client, $config);
+      $oauth2 = new Oauth2Subscriber($token);
+
+      // Check if we have the cache key
+      if (false !== $cachedAccessToken = $memcached->get(self::ACCESS_TOKEN_CACHE_KEY_PREFIX)) {
+          $oauth2->setAccessToken($cachedAccessToken);
+      }
+
+      // Update the cache token with the access token
+      $memcached->set(self::ACCESS_TOKEN_CACHE_KEY_PREFIX, $oauth2->getAccessToken());
+
+      $client = new Client([
+          'defaults' => [
+              'auth' => 'oauth2',
+              'subscribers' => [$oauth2],
+          ],
+      ]);
+
+      $response = $client->get('http://127.0.0.1:8000/api/time');
+
+      $result = json_decode($response->getBody(), true);
+
+      return new Response(sprintf(
+          "Date from the API <br/> Date: %s <br/> Time: %s",
+          $result['date'],
+          $result['time']
+      ));
+    }
+}
+
+{% endhighlight %}
+
+Now our token will only be regenerate if expired.
+
+You can access full `time-reader` code on [Github](https://github.com/ajouve/time-reader){:target="_blank"}
+In the github example I am not using `http://127.0.0.1:8000` to call my api but `http://time-api.local`
+
+I hope this tutorial will be useful for you, if you have any problem or remark you can contact me on twitter, just have a look to the footer for the details ;)
+
+Github repositories:
+
+* [time-api](https://github.com/ajouve/time-api){:target="_blank"}
+* [time-reader](https://github.com/ajouve/time-reader){:target="_blank"}
